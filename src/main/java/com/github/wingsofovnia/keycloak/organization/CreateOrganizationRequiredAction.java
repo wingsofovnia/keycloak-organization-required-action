@@ -28,8 +28,6 @@ import org.keycloak.models.utils.FormMessage;
 import org.keycloak.organization.OrganizationProvider;
 import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.provider.ProviderConfigurationBuilder;
-import org.keycloak.services.validation.Validation;
-import org.keycloak.userprofile.ValidationException;
 
 import java.util.List;
 import java.util.Optional;
@@ -45,8 +43,6 @@ import static org.keycloak.utils.RequiredActionHelper.getRequiredActionByProvide
 public class CreateOrganizationRequiredAction implements RequiredActionProvider, RequiredActionFactory {
 
     private static final String PROVIDER_ID = "create-organization-required-action";
-
-    public static final String CREATE_ORG_HELP_TEXT_KEY = "create_organization_help_text";
 
     public static final String SKIP_ROLE_KEY = "skip_role";
     public static final String SKIP_ROLE_DEFAULT_VALUE = "admin"; // realm admin
@@ -64,13 +60,6 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
     public static final String ADD_AS_MANAGED_OPT_UNMANAGED = "Unmanaged";
 
     private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = ProviderConfigurationBuilder.create()
-            .property()
-            .name(CREATE_ORG_HELP_TEXT_KEY)
-            .label("Custom help text on the organization creation page")
-            .helpText("If not set, the default localized message will be displayed")
-            .type(ProviderConfigProperty.STRING_TYPE)
-            .defaultValue(null)
-            .add()
             .property()
             .name(SKIP_ROLE_KEY)
             .label("Do not require from users with role")
@@ -288,7 +277,6 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
     ) {
         final LoginFormsProvider loginFormsProvider = context.form()
                 .setAttribute("user", authenticatedUser)
-                .setAttribute("helpText", getCustomHelpText(context.getSession()).orElse(null))
                 .setAttribute("isDomainGenerationEnabled", isDomainGenerationEnabled(context.getSession()));
 
         if (!errors.isEmpty()) {
@@ -303,14 +291,6 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
             @Nullable OrganizationModel invitingOrganization
     ) {
         return challengeOf(context, authenticatedUser, invitingOrganization, List.of());
-    }
-
-    private Optional<String> getCustomHelpText(KeycloakSession session) {
-        final String helpText = getConfigValue(CREATE_ORG_HELP_TEXT_KEY, session);
-        if (helpText == null || helpText.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.of(helpText);
     }
 
     private Optional<String> getSkippedRole(KeycloakSession session) {

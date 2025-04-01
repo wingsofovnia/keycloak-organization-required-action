@@ -3,7 +3,7 @@
     <#if section = "header">
         ${msg("orgCreate")}
     <#elseif section = "form">
-        <p>${helpText!msg("orgHelpText")}</p>
+        <p>${msg("orgHelpText")}</p>
         <br/>
 
         <div id="kc-form">

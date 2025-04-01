@@ -29,7 +29,6 @@ admin intervention.
   for self-registered tenants.
 * Appends a `?query=true` flag to the redirect URL to allow custom handling.
 * Supports assigning users as either managed or unmanaged members.
-* Customizable help text.
 
 ## Installation
 * Build `./gradlew :jar` or take latest from [Releases](https://github.com/wingsofovnia/keycloak-organization-required-action/releases).
