@@ -1,6 +1,8 @@
 package com.github.wingsofovnia.keycloak.organization.attribute;
 
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxLengthRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinLengthRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RegexRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RequiredRule;
@@ -24,17 +26,23 @@ import java.util.stream.Stream;
  * a configurable set of validation rules expressed as a semicolon-separated string.
  * <p>
  * Each rule is expressed in the format {@code ruleName[:expectation]}.
- * Rules are applied independently and results are returned as a {@link AttributeCheckResult},
- * indicating whether the value passed validation or which rules failed.
+ * Rules are applied independently but in the provided order and results are returned as a
+ * {@link AttributeCheckResult}, indicating whether the value passed validation or which rules failed.
  * <p>
  * Supported rules include:
  * <ul>
  *     <li><b>required</b> – value must be non-blank</li>
- *     <li><b>type:double|boolean</b> – checks if the value matches the type</li>
- *     <li><b>min:X</b> – numeric minimum OR minimum string length (inclusive)</li>
- *     <li><b>max:X</b> – numeric maximum OR maximum string length (inclusive)</li>
+ *     <li><b>type:(double|number)|boolean</b> – checks if the value matches the type</li>
+ *     <li><b>min:X</b> – numeric minimum (inclusive)</li>
+ *     <li><b>max:X</b> – numeric maximum (inclusive)</li>
+ *     <li><b>minLength:X</b> – minimum string length (inclusive)</li>
+ *     <li><b>maxLength:X</b> – maximum string length (inclusive)</li>
  *     <li><b>regex:pattern</b> – regex pattern match</li>
  * </ul>
+ * <p>
+ * Notice: {@code type} rules is merely an assertion that the value can be parsed/converted to the provided
+ * expectation. All the rules treat value as string and parse input if needed individually. For example, if {@code min}
+ * is set, it will attempt to parse value to a number even if {@code type: number} is not in the ruleset.
  *
  * <p><b>Example usage:</b></p>
  *
@@ -63,6 +71,8 @@ public final class Attributes {
     private static final List<Rule> RULES = List.of(
             new MinRule(),
             new MaxRule(),
+            new MinLengthRule(),
+            new MaxLengthRule(),
             new RequiredRule(),
             new RegexRule(),
             new TypeRule()
@@ -127,7 +137,19 @@ public final class Attributes {
         return AttributeCheckResult.success();
     }
 
-    private static Set<RuleDef> ruleDefsOf(String ruleDefSetStr) {
+    public static Optional<RuleDef> findRule(Set<RuleDef> ruleDefSet, Class<? extends Rule> ruleClass) {
+        final Optional<Rule> ruleOpt = RULES.stream().filter(ruleClass::isInstance).findAny();
+        if (ruleOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        final String ruleName = ruleOpt.get().ruleName();
+        return ruleDefSet.stream()
+                .filter(def -> def.ruleName().equals(ruleName))
+                .findFirst();
+    }
+
+    public static Set<RuleDef> ruleDefsOf(String ruleDefSetStr) {
         return Stream.of(ruleDefSetStr.split(RULES_DEF_SET_SEPARATOR))
                 .filter(ruleDefStr -> !ruleDefStr.isBlank())
                 .map(String::trim)
@@ -135,7 +157,11 @@ public final class Attributes {
                 .collect(Collectors.toSet());
     }
 
-    private static RuleDef ruleDefOf(String ruleDefStr) {
+    public static Optional<RuleDef> findRule(String ruleDefSetStr, Class<? extends Rule> ruleClass) {
+        return findRule(ruleDefsOf(ruleDefSetStr), ruleClass);
+    }
+
+    public static RuleDef ruleDefOf(String ruleDefStr) {
         final String[] ruleNameAndExpectation = ruleDefStr.split(RULE_EXPECTATION_SEPARATOR, 2);
         if (ruleNameAndExpectation.length < 1) {
             throw new IllegalArgumentException("Rule definition '" + ruleDefStr + "' is invalid");
