@@ -5,7 +5,7 @@ unless the user was invited via a link.
 <p align="center">
     <img
         alt="Required Action in Action (Animation)"
-        src="https://github.com/user-attachments/assets/fc343d08-400d-4dc5-918a-90a1c8595028"
+        src="https://github.com/user-attachments/assets/382c14a3-1342-4f75-bcd3-bbb79e6e099a"
         width="500px"
     />
 </p>
@@ -23,11 +23,12 @@ admin intervention.
 
 ## Features
 * Ensures every user is assigned to an organization.
+* Collects custom organization attributes from users with rule-based validation (see config help text for details).
 * Not applied if the user is invited via a link (handled by standard [`RegistrationUserCreation`](https://github.com/keycloak/keycloak/blob/faea1d6595bd3a33643088cd6d8a1feef45c5417/services/src/main/java/org/keycloak/authentication/forms/RegistrationUserCreation.java#L337-L350)).
 * Ignores users with preconfigured roles (realm `admin` by default).
 * Supports generating random organization domains to satisfy model constraints as it doesn't make much sense
   for self-registered tenants.
-* Appends a `?query=true` flag to the redirect URL to allow custom handling.
+* Appends a `?{flag_name}=true` flag to the redirect URL to allow custom handling.
 * Supports assigning users as either managed or unmanaged members.
 
 ## Installation

@@ -32,7 +32,7 @@ import java.util.stream.Stream;
  * Supported rules include:
  * <ul>
  *     <li><b>required</b> – value must be non-blank</li>
- *     <li><b>type:(double|number)|boolean</b> – checks if the value matches the type</li>
+ *     <li><b>type:(double|number)|boolean</b> – checks if the value can be parsed into the type</li>
  *     <li><b>min:X</b> – numeric minimum (inclusive)</li>
  *     <li><b>max:X</b> – numeric maximum (inclusive)</li>
  *     <li><b>minLength:X</b> – minimum string length (inclusive)</li>

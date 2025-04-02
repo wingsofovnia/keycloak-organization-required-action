@@ -1,7 +1,16 @@
 package com.github.wingsofovnia.keycloak.organization;
 
+import com.github.wingsofovnia.keycloak.organization.attribute.AttributeCheckResult;
+import com.github.wingsofovnia.keycloak.organization.attribute.Attributes;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxLengthRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinLengthRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RequiredRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDef;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.TypeRule;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
@@ -25,24 +34,30 @@ import org.keycloak.models.RequiredActionProviderModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.utils.FormMessage;
+import org.keycloak.models.utils.MapperTypeSerializer;
 import org.keycloak.organization.OrganizationProvider;
 import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.provider.ProviderConfigurationBuilder;
+import org.keycloak.services.validation.Validation;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import static com.github.wingsofovnia.keycloak.organization.Organizations.getInvitingOrganization;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.organizationAliasOf;
-import static com.github.wingsofovnia.keycloak.organization.Organizations.getInvitingOrganizationOrNull;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.randomDomainOf;
+import static java.util.stream.Collectors.*;
 import static org.keycloak.utils.RequiredActionHelper.getRequiredActionByProviderId;
 
 public class CreateOrganizationRequiredAction implements RequiredActionProvider, RequiredActionFactory {
 
     private static final String PROVIDER_ID = "create-organization-required-action";
+
+    public static final String ATTRIBUTES_KEY = "attributes";
 
     public static final String SKIP_ROLE_KEY = "skip_role";
     public static final String SKIP_ROLE_DEFAULT_VALUE = "admin"; // realm admin
@@ -60,6 +75,24 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
     public static final String ADD_AS_MANAGED_OPT_UNMANAGED = "Unmanaged";
 
     private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = ProviderConfigurationBuilder.create()
+            .property()
+            .name(ATTRIBUTES_KEY)
+            .label("Organization attributes")
+            .helpText("""
+                    Defines organization attributes to collect from the user during account creation.
+                    Each entry maps an attribute name (key) to a semicolon-separated list of validation rules (value).
+                    Attribute names will be shown as-is in the form unless a realm translation is set.
+                    Supported rules: required — not blank;
+                    type:number|boolean — asserts value is parsable to number or boolean;
+                    min/max — numeric boundaries (inclusive);
+                    minLength/maxLength — string length constraints (inclusive);
+                    regex — must match the given pattern.
+                    All rules treat values as strings and parse when needed.
+                    Example: "score" → "required; type:number; min:0; max:100"
+                    """
+            )
+            .type(ProviderConfigProperty.MAP_TYPE)
+            .add()
             .property()
             .name(SKIP_ROLE_KEY)
             .label("Do not require from users with role")
@@ -104,6 +137,7 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
 
     private static final String ORGANIZATION_NAME_FIELD = "orgName";
     private static final String ORGANIZATION_DOMAIN_FIELD = "orgDomain";
+    private static final String ORGANIZATION_ATTR_FIELD_PREFIX = "orgAttr_";
 
     @Override
     public InitiatedActionSupport initiatedActionSupport() {
@@ -153,10 +187,7 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
 
     @Override
     public void requiredActionChallenge(RequiredActionContext context) {
-        final UserModel user = context.getUser();
-        final OrganizationModel maybeInvitingOrganization = getInvitingOrganizationOrNull(context.getSession());
-
-        context.challenge(challengeOf(context, user, maybeInvitingOrganization));
+        context.challenge(challengeOf(context));
     }
 
     @Override
@@ -169,7 +200,7 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
         final String organizationName = formData.getFirst(ORGANIZATION_NAME_FIELD);
         if (organizationName == null || organizationName.isBlank()) {
             final List<FormMessage> formMessages = List.of(new FormMessage(ORGANIZATION_NAME_FIELD, Messages.ORGANIZATION_NAME_IS_BLANK));
-            context.challenge(challengeOf(context, user, null, formMessages));
+            context.challenge(challengeOf(context, formData, formMessages));
             return;
         }
         final String organizationAlias = organizationAliasOf(organizationName);
@@ -180,31 +211,55 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
             organizationDomainName = formData.getFirst(ORGANIZATION_DOMAIN_FIELD);
             if (organizationDomainName == null || organizationDomainName.isBlank()) {
                 final List<FormMessage> formMessages = List.of(new FormMessage(ORGANIZATION_DOMAIN_FIELD, Messages.ORGANIZATION_DOMAIN_IS_BLANK));
-                context.challenge(challengeOf(context, user, null, formMessages));
+                context.challenge(challengeOf(context, formData, formMessages));
                 return;
             }
         }
 
         // Create organization
-        OrganizationModel createdOrganization = null;
+        OrganizationModel createdOrganization;
         try {
             createdOrganization = organizationProvider.create(organizationName, organizationAlias);
-            createdOrganization.setDomains(Set.of(new OrganizationDomainModel(organizationDomainName)));
         } catch (ModelDuplicateException e) {
             final List<FormMessage> formMessages = List.of(new FormMessage(ORGANIZATION_NAME_FIELD, Messages.ORGANIZATION_EXISTS));
-            context.challenge(challengeOf(context, user, null, formMessages));
+            context.challenge(challengeOf(context, formData, formMessages));
             return;
+        }
+
+        // Set domain
+        try {
+            createdOrganization.setDomains(Set.of(new OrganizationDomainModel(organizationDomainName)));
         } catch (ModelValidationException e) {
             try {
                 final List<FormMessage> formMessages = List.of(new FormMessage(ORGANIZATION_DOMAIN_FIELD, Messages.ORGANIZATION_DOMAIN_IS_INVALID));
-                context.challenge(challengeOf(context, user, null, formMessages));
+                context.challenge(challengeOf(context, formData, formMessages));
                 return;
             } finally {
-                if (createdOrganization != null) {
-                    organizationProvider.remove(createdOrganization);
-                }
+                organizationProvider.remove(createdOrganization);
             }
         }
+
+        // Set attributes
+        final Map<String, String> organizationAttributeDefs = getOrganizationAttributeDefs(context.getSession());
+        final Map<String, List<String>> organizationAttributes = new HashMap<>();
+        for (Map.Entry<String, String> attrDef : organizationAttributeDefs.entrySet()) {
+            final String attrName = attrDef.getKey();
+            final String attrRuleDefSetStr = attrDef.getValue();
+
+            final String attrFiledName = ORGANIZATION_ATTR_FIELD_PREFIX + attrName;
+            final String attrFieldValue = formData.getFirst(attrFiledName);
+
+            final AttributeCheckResult attrCheckResult = Attributes.check(attrFieldValue, attrRuleDefSetStr);
+            if (!attrCheckResult.valid()) {
+                final List<FormMessage> formMessages = List.of(new FormMessage(attrFiledName, Messages.ORGANIZATION_ATTRIBUTE_IS_INVALID));
+                context.challenge(challengeOf(context, formData, formMessages));
+                organizationProvider.remove(createdOrganization);
+                return;
+            }
+
+            organizationAttributes.put(attrName, List.of(attrFieldValue));
+        }
+        createdOrganization.setAttributes(organizationAttributes);
 
         // Add the user to the newly created org
         if (isAddAsManagedEnabled(context.getSession())) {
@@ -271,91 +326,138 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
 
     private Response challengeOf(
             @Nonnull RequiredActionContext context,
-            @Nonnull UserModel authenticatedUser,
-            @Nullable OrganizationModel invitingOrganization,
+            @Nonnull MultivaluedMap<String, String> formData,
             @Nonnull List<FormMessage> errors
     ) {
         final LoginFormsProvider loginFormsProvider = context.form()
-                .setAttribute("user", authenticatedUser)
-                .setAttribute("isDomainGenerationEnabled", isDomainGenerationEnabled(context.getSession()));
+                .setAttribute("isDomainGenerationEnabled", isDomainGenerationEnabled(context.getSession()))
+                .setAttribute("formData", formData.entrySet().stream()
+                        .filter(entry -> !entry.getValue().isEmpty())
+                        .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().get(0))));
 
         if (!errors.isEmpty()) {
             errors.forEach(loginFormsProvider::addError);
         }
+
+        final Map<String, String> organizationAttributeDefs = getOrganizationAttributeDefs(context.getSession());
+        if (!organizationAttributeDefs.isEmpty()) {
+            final Map<String, Map<String, String>> organizationAttributeAttribute = new HashMap<>();
+
+            for (Map.Entry<String, String> attrDef : organizationAttributeDefs.entrySet()) {
+                final String attrName = attrDef.getKey();
+                final String attrRuleDefSetStr = attrDef.getValue();
+
+                final Set<RuleDef> attrFieldRuleDefs = Attributes.ruleDefsOf(attrRuleDefSetStr);
+
+                final String attrFieldType = Attributes.findRule(attrFieldRuleDefs, TypeRule.class)
+                        .filter(rule -> rule.expectation() != null)
+                        .flatMap(def -> switch (def.expectation()) {
+                            case "double", "number" -> Optional.of("number");
+                            default -> Optional.empty();
+                        }).orElse("text");
+
+                final String attrFieldMax = Attributes.findRule(attrFieldRuleDefs, MaxRule.class)
+                        .map(RuleDef::expectation)
+                        .orElse("");
+                final String attrFieldMin = Attributes.findRule(attrFieldRuleDefs, MinRule.class)
+                        .map(RuleDef::expectation)
+                        .orElse("");
+
+                final String attrFieldMaxLength = Attributes.findRule(attrFieldRuleDefs, MaxLengthRule.class)
+                        .map(RuleDef::expectation)
+                        .orElse("");
+
+                final String attrFieldMinLength = Attributes.findRule(attrFieldRuleDefs, MinLengthRule.class)
+                        .map(RuleDef::expectation)
+                        .orElse("");
+
+                final String attrFieldRequired = Attributes.findRule(attrFieldRuleDefs, RequiredRule.class)
+                        .map(def -> Boolean.TRUE.toString())
+                        .orElse("");
+
+                organizationAttributeAttribute.put(attrName, Map.of(
+                        "type", attrFieldType,
+                        "required", attrFieldRequired,
+                        "min", attrFieldMin,
+                        "max", attrFieldMax,
+                        "minLength", attrFieldMinLength,
+                        "maxLength", attrFieldMaxLength
+                ));
+            }
+
+            loginFormsProvider.setAttribute("attributes", organizationAttributeAttribute);
+        }
+
         return loginFormsProvider.createForm("new_organization.ftl");
     }
 
-    private Response challengeOf(
-            @Nonnull RequiredActionContext context,
-            @Nonnull UserModel authenticatedUser,
-            @Nullable OrganizationModel invitingOrganization
-    ) {
-        return challengeOf(context, authenticatedUser, invitingOrganization, List.of());
+    private Response challengeOf(@Nonnull RequiredActionContext context) {
+        return challengeOf(context, new MultivaluedHashMap<>(), List.of());
     }
 
     private Optional<String> getSkippedRole(KeycloakSession session) {
-        final String skippedRole = getConfigValue(SKIP_ROLE_KEY, session);
-        if (skippedRole == null || skippedRole.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.of(skippedRole);
+        return getConfigValue(SKIP_ROLE_KEY, session)
+                .filter(role -> !role.isBlank());
     }
 
     private boolean isDomainGenerationEnabled(KeycloakSession session) {
-        final String genDomainStr = getConfigValue(GEN_DOMAIN_KEY, session);
-        if (genDomainStr == null) {
-            return GEN_DOMAIN_KEY_DEFAULT_VALUE;
-        }
-
-        return Boolean.parseBoolean(genDomainStr);
+        return getConfigValue(GEN_DOMAIN_KEY, session)
+                .map(Boolean::parseBoolean)
+                .orElse(GEN_DOMAIN_KEY_DEFAULT_VALUE);
     }
 
     private boolean isNewOrganizationQueryFlagEnabled(KeycloakSession session) {
-        final String redirectQueryFlagStr = getConfigValue(REDIRECT_QUERY_FLAG_KEY, session);
-        if (redirectQueryFlagStr == null) {
-            return REDIRECT_QUERY_FLAG_KEY_DEFAULT_VALUE;
-        }
-
-        return Boolean.parseBoolean(redirectQueryFlagStr);
+        return getConfigValue(REDIRECT_QUERY_FLAG_KEY, session)
+                .map(Boolean::parseBoolean)
+                .orElse(REDIRECT_QUERY_FLAG_KEY_DEFAULT_VALUE);
     }
 
     private String getNewOrganizationQueryFlagName(KeycloakSession session) {
-        final String flagName = getConfigValue(REDIRECT_QUERY_FLAG_NAME_KEY, session);
-        if (flagName == null || flagName.isBlank()) {
-            return REDIRECT_QUERY_FLAG_NAME_KEY_DEFAULT_VALUE;
-        }
-        return flagName;
+        return getConfigValue(REDIRECT_QUERY_FLAG_NAME_KEY, session)
+                .filter(name -> !name.isBlank())
+                .orElse(REDIRECT_QUERY_FLAG_NAME_KEY_DEFAULT_VALUE);
     }
 
     private boolean isAddAsManagedEnabled(KeycloakSession session) {
-        final String addAsManagedStr = getConfigValue(ADD_AS_MANAGED_KEY, session);
-        if (addAsManagedStr == null) {
-            return true;
-        }
-
-        return ADD_AS_MANAGED_OPT_MANAGED.equals(addAsManagedStr);
+        final Optional<String> addAsManagedStr = getConfigValue(ADD_AS_MANAGED_KEY, session);
+        return addAsManagedStr.map(ADD_AS_MANAGED_OPT_MANAGED::equals).orElse(true);
     }
 
-    private String getConfigValue(@Nonnull String key, @Nonnull KeycloakSession session) {
-        if (key == null || key.isBlank()) {
-            return null;
-        }
+    private Map<String, String> getOrganizationAttributeDefs(KeycloakSession session) {
+        return getConfigMapValue(ATTRIBUTES_KEY, session).orElse(Map.of());
+    }
+
+    private Optional<String> getConfigValue(@Nonnull String key, @Nonnull KeycloakSession session) {
+        return getConfigModel(session)
+                .filter(model -> model.containsConfigKey(key))
+                .map(model -> model.getConfigValue(key));
+    }
+
+    private Optional<Map<String, String>> getConfigMapValue(@Nonnull String key, @Nonnull KeycloakSession session) {
+        return getConfigModel(session)
+                .filter(model -> model.containsConfigKey(key))
+                .map(model -> model.getConfigValue(key))
+                .map(MapperTypeSerializer::deserialize)
+                .map(mapWithMaybeMultipleValues -> mapWithMaybeMultipleValues
+                        .entrySet()
+                        .stream()
+                        .filter(entry -> entry.getValue().stream().anyMatch(value -> !value.isBlank()))
+                        .collect(toMap(Map.Entry::getKey, entry -> entry.getValue().get(entry.getValue().size() - 1)))
+                );
+    }
+
+    private Optional<RequiredActionConfigModel> getConfigModel(@Nonnull KeycloakSession session) {
         if (session == null) {
-            return null;
+            return Optional.empty();
         }
 
         final KeycloakContext keycloakContext = session.getContext();
         final RealmModel realm = keycloakContext.getRealm();
         final RequiredActionProviderModel requiredAction = getRequiredActionByProviderId(realm, PROVIDER_ID);
         if (requiredAction == null) {
-            return null;
+            return Optional.empty();
         }
 
-        final RequiredActionConfigModel configModel = realm.getRequiredActionConfigByAlias(requiredAction.getAlias());
-        if (configModel == null || !configModel.containsConfigKey(key)) {
-            return null;
-        }
-
-        return configModel.getConfigValue(key);
+        return Optional.ofNullable(realm.getRequiredActionConfigByAlias(requiredAction.getAlias()));
     }
 }

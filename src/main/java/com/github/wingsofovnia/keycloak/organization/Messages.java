@@ -6,4 +6,5 @@ public class Messages {
     public static final String ORGANIZATION_DOMAIN_IS_BLANK = "orgDomainBlank";
     public static final String ORGANIZATION_EXISTS = "orgExists";
     public static final String ORGANIZATION_DOMAIN_IS_INVALID = "orgDomainInvalid";
+    public static final String ORGANIZATION_ATTRIBUTE_IS_INVALID = "orgAttributeInvalid";
 }
