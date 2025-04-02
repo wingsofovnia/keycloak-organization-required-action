@@ -1,6 +1,6 @@
-package com.github.wingsofovnia.keycloak.organization.field.rule;
+package com.github.wingsofovnia.keycloak.organization.attribute.rule;
 
-import com.github.wingsofovnia.keycloak.organization.field.Fields;
+import com.github.wingsofovnia.keycloak.organization.attribute.Attributes;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
@@ -10,7 +10,7 @@ import jakarta.annotation.Nullable;
  * and how validation is performed.
  * <p>
  * Rules are intended to be stateless, reusable, and used via the
- * {@link Fields}.
+ * {@link Attributes}.
  */
 public interface Rule {
 

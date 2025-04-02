@@ -1,4 +1,4 @@
-package com.github.wingsofovnia.keycloak.organization.field.rule;
+package com.github.wingsofovnia.keycloak.organization.attribute.rule;
 
 import jakarta.annotation.Nullable;
 

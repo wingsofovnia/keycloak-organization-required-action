@@ -1,13 +1,13 @@
-package com.github.wingsofovnia.keycloak.organization.field;
+package com.github.wingsofovnia.keycloak.organization.attribute;
 
-import com.github.wingsofovnia.keycloak.organization.field.rule.MaxRule;
-import com.github.wingsofovnia.keycloak.organization.field.rule.MinRule;
-import com.github.wingsofovnia.keycloak.organization.field.rule.RegexRule;
-import com.github.wingsofovnia.keycloak.organization.field.rule.RequiredRule;
-import com.github.wingsofovnia.keycloak.organization.field.rule.Rule;
-import com.github.wingsofovnia.keycloak.organization.field.rule.RuleDef;
-import com.github.wingsofovnia.keycloak.organization.field.rule.RuleDefException;
-import com.github.wingsofovnia.keycloak.organization.field.rule.TypeRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RegexRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RequiredRule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.Rule;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDef;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDefException;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.TypeRule;
 import jakarta.annotation.Nullable;
 
 import java.util.ArrayList;
@@ -20,11 +20,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A simple rule-based validation engine for validating single field values against
+ * A simple rule-based validation engine for validating attribute values against
  * a configurable set of validation rules expressed as a semicolon-separated string.
  * <p>
  * Each rule is expressed in the format {@code ruleName[:expectation]}.
- * Rules are applied independently and results are returned as a {@link FieldCheckResult},
+ * Rules are applied independently and results are returned as a {@link AttributeCheckResult},
  * indicating whether the value passed validation or which rules failed.
  * <p>
  * Supported rules include:
@@ -39,7 +39,7 @@ import java.util.stream.Stream;
  * <p><b>Example usage:</b></p>
  *
  * <pre>{@code
- * FieldCheckResult result = Fields.check("42", "required;type:double;min:0;max:100");
+ * AttributeCheckResult result = Attributes.check("42", "required;type:double;min:0;max:100");
  * if (result.valid()) {
  *     // valid input
  * } else {
@@ -51,12 +51,12 @@ import java.util.stream.Stream;
  *
  * <p>
  * If a rule is misconfigured (e.g. invalid regex or unsupported type), validation will return a failed result
- * and include the cause in {@link FieldCheckResult#exception()}.
+ * and include the cause in {@link AttributeCheckResult#exception()}.
  * </p>
  */
-public final class Fields {
+public final class Attributes {
 
-    private Fields() {
+    private Attributes() {
         throw new AssertionError();
     }
 
@@ -74,22 +74,22 @@ public final class Fields {
     private static final String RULE_EXPECTATION_SEPARATOR = ":";
 
     /**
-     * Validates a single field value against a semicolon-separated set of rules.
+     * Validates a single attribute value against a semicolon-separated set of rules.
      * <p>
      * Example: {@code "required;type:double;min:1;max:10"}
      *
-     * @param value         the field value to validate (can be null)
+     * @param value         the attribute value to validate (can be null)
      * @param ruleDefSetStr rule string defining validation logic; may be null or blank
-     * @return a {@link FieldCheckResult} object indicating whether the value passed validation and, if not, which rules failed
+     * @return a {@link AttributeCheckResult} object indicating whether the value passed validation and, if not, which rules failed
      */
-    public static FieldCheckResult check(String value, String ruleDefSetStr) {
+    public static AttributeCheckResult check(String value, String ruleDefSetStr) {
         if (ruleDefSetStr == null || ruleDefSetStr.isBlank()) {
-            return FieldCheckResult.success();
+            return AttributeCheckResult.success();
         }
         return check(value, ruleDefsOf(ruleDefSetStr));
     }
 
-    private static FieldCheckResult check(String value, Set<RuleDef> ruleDefSet) {
+    private static AttributeCheckResult check(String value, Set<RuleDef> ruleDefSet) {
         final Map<String, String> ruleDefSetMap = new HashMap<>(ruleDefSet.size());
         for (RuleDef ruleDef : ruleDefSet) {
             final String ruleName = ruleDef.ruleName();
@@ -100,7 +100,7 @@ public final class Fields {
         return check(value, ruleDefSetMap);
     }
 
-    private static FieldCheckResult check(String value, Map<String, String> ruleDefSetMap) {
+    private static AttributeCheckResult check(String value, Map<String, String> ruleDefSetMap) {
         final List<RuleDef> failedRules = new ArrayList<>(ruleDefSetMap.size());
 
         for (Map.Entry<String, String> ruleEntry : ruleDefSetMap.entrySet()) {
@@ -117,20 +117,20 @@ public final class Fields {
                     failedRules.add(RuleDef.of(ruleName, ruleExpectation));
                 }
             } catch (RuleDefException e) {
-                return FieldCheckResult.failure(RuleDef.of(ruleName, ruleExpectation), e);
+                return AttributeCheckResult.failure(RuleDef.of(ruleName, ruleExpectation), e);
             }
         }
 
         if (!failedRules.isEmpty()) {
-            return FieldCheckResult.failure(failedRules);
+            return AttributeCheckResult.failure(failedRules);
         }
-        return FieldCheckResult.success();
+        return AttributeCheckResult.success();
     }
 
     private static Set<RuleDef> ruleDefsOf(String ruleDefSetStr) {
         return Stream.of(ruleDefSetStr.split(RULES_DEF_SET_SEPARATOR))
                 .map(String::trim)
-                .map(Fields::ruleDefOf)
+                .map(Attributes::ruleDefOf)
                 .collect(Collectors.toSet());
     }
 
