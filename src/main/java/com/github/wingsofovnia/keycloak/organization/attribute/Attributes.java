@@ -31,8 +31,8 @@ import java.util.stream.Stream;
  * <ul>
  *     <li><b>required</b> – value must be non-blank</li>
  *     <li><b>type:double|boolean</b> – checks if the value matches the type</li>
- *     <li><b>min:X</b> – numeric minimum (inclusive)</li>
- *     <li><b>max:X</b> – numeric maximum (inclusive)</li>
+ *     <li><b>min:X</b> – numeric minimum OR minimum string length (inclusive)</li>
+ *     <li><b>max:X</b> – numeric maximum OR maximum string length (inclusive)</li>
  *     <li><b>regex:pattern</b> – regex pattern match</li>
  * </ul>
  *
@@ -129,6 +129,7 @@ public final class Attributes {
 
     private static Set<RuleDef> ruleDefsOf(String ruleDefSetStr) {
         return Stream.of(ruleDefSetStr.split(RULES_DEF_SET_SEPARATOR))
+                .filter(ruleDefStr -> !ruleDefStr.isBlank())
                 .map(String::trim)
                 .map(Attributes::ruleDefOf)
                 .collect(Collectors.toSet());

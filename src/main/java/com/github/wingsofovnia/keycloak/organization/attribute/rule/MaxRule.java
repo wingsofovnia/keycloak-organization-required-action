@@ -10,7 +10,14 @@ public class MaxRule extends RuleWithNumericExpectation {
     }
 
     @Override
-    protected boolean numericCheckAgainstExpectation(@Nonnull Double value, @Nonnull Double expectation) {
-        return value <= expectation;
+    protected boolean checkAgainstNumericExpectation(@Nonnull String valueStr, @Nonnull Double expectation) {
+        final String trimmedValueStr = valueStr.trim();
+        try {
+            final double num = Double.parseDouble(trimmedValueStr);
+            return num <= expectation;
+        } catch (NumberFormatException e) {
+            // Also support: check string length
+            return trimmedValueStr.length() <= expectation;
+        }
     }
 }

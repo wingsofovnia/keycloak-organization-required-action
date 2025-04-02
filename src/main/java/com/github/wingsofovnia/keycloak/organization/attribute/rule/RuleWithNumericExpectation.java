@@ -3,16 +3,10 @@ package com.github.wingsofovnia.keycloak.organization.attribute.rule;
 import jakarta.annotation.Nonnull;
 
 /**
- * Specialization of {@link RuleWithExpectation} for rules that use numeric comparisons.
+ * Specialization of {@link RuleWithExpectation} for rules where the expectation is numeric.
+ * Value can be interpreted freely by subclasses.
  * <p>
- * This class parses both the expectation and value as {@code double}, handles parsing errors,
- * and delegates the actual numeric logic to {@link #numericCheckAgainstExpectation(Double, Double)}.
- *
- * <p><b>Behavior:</b></p>
- * <ul>
- *     <li>Throws {@link RuleDefException} if the expectation is not a valid number</li>
- *     <li>Returns {@code false} if the value is not a valid number</li>
- * </ul>
+ * Throws {@link RuleDefException} if the expectation is not a valid number
  */
 abstract class RuleWithNumericExpectation extends RuleWithExpectation {
 
@@ -25,15 +19,8 @@ abstract class RuleWithNumericExpectation extends RuleWithExpectation {
             throw new RuleDefException("Expectation must be a number", e);
         }
 
-        final double value;
-        try {
-            value = Double.parseDouble(valueStr);
-        } catch (NumberFormatException e) {
-            return false;
-        }
-
-        return numericCheckAgainstExpectation(value, expectation);
+        return checkAgainstNumericExpectation(valueStr, expectation);
     }
 
-    protected abstract boolean numericCheckAgainstExpectation(@Nonnull Double value, @Nonnull Double expectation);
+    protected abstract boolean checkAgainstNumericExpectation(@Nonnull String valueStr, @Nonnull Double expectation);
 }

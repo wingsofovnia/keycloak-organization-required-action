@@ -30,16 +30,13 @@ class AttributesTest {
     }
 
     @Test
-    @DisplayName("Fails when value cannot be parsed as number")
-    void failsInvalidNumber() {
-        AttributeCheckResult result = Attributes.check("notANumber", "type:double; min:1");
+    @DisplayName("Min rule falls back to string length when value is not numeric")
+    void minRuleFallsBackToLengthWhenNotNumeric() {
+        AttributeCheckResult result = Attributes.check("notANumber", "min:5");
 
-        assertThat(result.valid()).isFalse();
-        assertThat(result.failedRules())
-                .containsExactlyInAnyOrder(
-                        RuleDef.of("type", "double"),
-                        RuleDef.of("min", "1")
-                );
+        // "notANumber".length() == 11 ≥ 5 → should pass
+        assertThat(result.valid()).isTrue();
+        assertThat(result.failedRules()).isEmpty();
     }
 
     @Test
@@ -52,17 +49,14 @@ class AttributesTest {
     }
 
     @Test
-    @DisplayName("Fails multiple rules when applicable")
-    void multipleFailuresAreReported() {
-        AttributeCheckResult result = Attributes.check("abc", "type:double; min:0; max:10");
+    @DisplayName("Only type rule fails when value is a string with valid length")
+    void onlyTypeFailsWhenMinMaxMatchLength() {
+        AttributeCheckResult result = Attributes.check("abc", "type:double; min:2; max:5");
 
+        // type:double → fail, min/max → pass (length 3)
         assertThat(result.valid()).isFalse();
         assertThat(result.failedRules())
-                .containsExactlyInAnyOrder(
-                        RuleDef.of("type", "double"),
-                        RuleDef.of("min", "0"),
-                        RuleDef.of("max", "10")
-                );
+                .containsExactly(RuleDef.of("type", "double"));
     }
 
     @Test
@@ -122,16 +116,13 @@ class AttributesTest {
     }
 
     @Test
-    @DisplayName("Handles mixed success and failure rules")
-    void partialSuccessReportsFailuresOnly() {
-        AttributeCheckResult result = Attributes.check("abc", "required; type:double; min:1");
+    @DisplayName("Mixed rules fail only on type")
+    void mixedRulesOnlyFailNonMatchingOnes() {
+        AttributeCheckResult result = Attributes.check("abc", "required; type:double; min:2");
 
         assertThat(result.valid()).isFalse();
         assertThat(result.failedRules())
-                .contains(
-                        RuleDef.of("type", "double"),
-                        RuleDef.of("min", "1")
-                );
+                .containsExactly(RuleDef.of("type", "double"));
     }
 
     @Test
@@ -254,13 +245,16 @@ class AttributesTest {
     }
 
     @Test
-    @DisplayName("Allows complex rule chains and only fails incorrect parts")
-    void complexRuleSetPartiallyFails() {
-        AttributeCheckResult result = Attributes.check("nope", "required; type:double; regex:\\d+; min:0");
+    @DisplayName("Fails on type and regex if min passes by length")
+    void failsOnlyOnTypeAndRegexIfMinLengthPasses() {
+        AttributeCheckResult result = Attributes.check("nope", "required; type:double; regex:\\d+; min:2");
 
         assertThat(result.valid()).isFalse();
         assertThat(result.failedRules())
-                .contains(RuleDef.of("type", "double"), RuleDef.of("regex", "\\d+"), RuleDef.of("min", "0"));
+                .containsExactlyInAnyOrder(
+                        RuleDef.of("type", "double"),
+                        RuleDef.of("regex", "\\d+")
+                );
     }
 
     @Test
@@ -322,5 +316,123 @@ class AttributesTest {
 
         assertThat(result.valid() || result.failedRules().size() == 1).isTrue();
         assertThat(result.exception()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Min rule applies to string length when value is not numeric")
+    void minAppliesToStringLength() {
+        AttributeCheckResult result = Attributes.check("abcd", "min:3");
+
+        assertThat(result.valid()).isTrue(); // "abcd".length() == 4 >= 3
+    }
+
+    @Test
+    @DisplayName("Min rule fails for short strings")
+    void minFailsOnShortString() {
+        AttributeCheckResult result = Attributes.check("ab", "min:3");
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failedRules()).containsExactly(RuleDef.of("min", "3"));
+    }
+
+    @Test
+    @DisplayName("Max rule applies to string length when value is not numeric")
+    void maxAppliesToStringLength() {
+        AttributeCheckResult result = Attributes.check("abc", "max:3");
+
+        assertThat(result.valid()).isTrue(); // length == 3
+    }
+
+    @Test
+    @DisplayName("Max rule fails for long strings")
+    void maxFailsOnLongString() {
+        AttributeCheckResult result = Attributes.check("abcdef", "max:5");
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failedRules()).containsExactly(RuleDef.of("max", "5"));
+    }
+
+    @Test
+    @DisplayName("Value that looks like number but is invalid falls back to length")
+    void numericParsingFallbacksToLength() {
+        AttributeCheckResult result = Attributes.check("5abc", "min:4");
+
+        assertThat(result.valid()).isTrue(); // fallback to length check: "5abc".length() == 4
+    }
+
+    @Test
+    @DisplayName("Min rule on empty string with fallback to length fails")
+    void minFailsOnEmptyStringLength() {
+        AttributeCheckResult result = Attributes.check("", "min:1");
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failedRules()).containsExactly(RuleDef.of("min", "1"));
+    }
+
+    @Test
+    @DisplayName("Max rule on empty string with fallback to length passes")
+    void maxPassesOnEmptyStringLength() {
+        AttributeCheckResult result = Attributes.check("", "max:0");
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("String with spaces is trimmed before applying min/max")
+    void minMaxTrimmedValueBeforeLengthCheck() {
+        AttributeCheckResult result = Attributes.check("  ab  ", "min:2; max:3");
+
+        // trimmed: "ab" → length 2, min:2 OK, max:3 OK
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Whitespace-only value fails min rule based on length")
+    void whitespaceOnlyFailsMinAsLengthIsZero() {
+        AttributeCheckResult result = Attributes.check("    ", "min:1");
+
+        // trimmed value becomes empty string
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failedRules()).containsExactly(RuleDef.of("min", "1"));
+    }
+
+    @Test
+    @DisplayName("Max rule accepts exact boundary value for numbers")
+    void maxBoundaryIsInclusiveForNumbers() {
+        AttributeCheckResult result = Attributes.check("10", "max:10");
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Max rule accepts string of exact length")
+    void maxBoundaryIsInclusiveForLength() {
+        AttributeCheckResult result = Attributes.check("abc", "max:3");
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Whitespace-padded numeric strings are trimmed before type and min/max check")
+    void paddedNumericStringStillValid() {
+        AttributeCheckResult result = Attributes.check("   42   ", "type:double; min:40; max:50");
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("All rules pass with well-formed value")
+    void allRulesPassWhenEverythingIsValid() {
+        AttributeCheckResult result = Attributes.check("true", "required; regex:true|false; type:boolean");
+
+        assertThat(result.valid()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Trailing semicolon in rule string is ignored")
+    void trailingSemicolonIgnored() {
+        AttributeCheckResult result = Attributes.check("123", "type:double; min:100;");
+
+        assertThat(result.valid()).isTrue();
     }
 }
