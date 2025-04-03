@@ -21,14 +21,14 @@ class AttributesTest {
     @DisplayName("Validates number within allowed range")
     void validNumberWithinRange() {
         AttributeCheckResult result = Attributes.check("5", "min:1; max:10");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Fails when number is below the minimum")
     void failsBelowMin() {
         AttributeCheckResult result = Attributes.check("3", "min:5");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new MinRule(5));
     }
 
@@ -36,21 +36,21 @@ class AttributesTest {
     @DisplayName("Accepts value equal to the minimum (i.e. is inclusive)")
     void minBoundaryIsInclusive() {
         AttributeCheckResult result = Attributes.check("10", "min:10");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Whitespace-padded numeric strings are trimmed before type and min/max check")
     void paddedNumericStringStillValid() {
         AttributeCheckResult result = Attributes.check("   42   ", "min:40; max:50");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("min:1 fails when blank string is treated as 0")
     void minFailsOnBlankStringParsedAsZero() {
         AttributeCheckResult result = Attributes.check("   ", "min:1");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules())
                 .containsExactly(new MinRule(1));
     }
@@ -66,7 +66,7 @@ class AttributesTest {
     @DisplayName("max:-1 fails when blank string is treated as 0")
     void maxFailsOnBlankStringParsedAsZero() {
         AttributeCheckResult result = Attributes.check("   ", "max:-1");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules())
                 .containsExactly(new MaxRule(-1));
     }
@@ -76,7 +76,7 @@ class AttributesTest {
     @DisplayName("max:1 does not fail when blank string is treated as 0")
     void maxNotFailsOnBlankStringParsedAsZero() {
         AttributeCheckResult result = Attributes.check("   ", "max:1");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
@@ -94,10 +94,10 @@ class AttributesTest {
     }
 
     @Test
-    @DisplayName("Only type rule fails when value is a string with valid length")
+    @DisplayName("Only type rule fails when value is a string with isValid length")
     void onlyTypeFailsWhenMinMaxMatchLength() {
         AttributeCheckResult result = Attributes.check("abc", "type:number; minLength:2; maxLength:5");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new TypeRule(TypeRule.Type.of("number").get()));
     }
 
@@ -105,21 +105,21 @@ class AttributesTest {
     @DisplayName("MinLength rule applies to trimmed value")
     void minLengthAppliesToTrimmedValue() {
         AttributeCheckResult result = Attributes.check(" ab ", "minLength:2");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Whitespace-only string fails minLength rule")
     void whitespaceOnlyFailsMinLength() {
         AttributeCheckResult result = Attributes.check("   ", "minLength:1");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
     }
 
     @Test
     @DisplayName("MaxLength rule fails on too long input")
     void maxLengthFails() {
         AttributeCheckResult result = Attributes.check("abcdef", "maxLength:5");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new MaxLengthRule(5));
     }
 
@@ -127,7 +127,7 @@ class AttributesTest {
     @DisplayName("Blank value fails required rule")
     void blankFailsRequired() {
         AttributeCheckResult result = Attributes.check("   ", "required");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new RequiredRule());
     }
 
@@ -135,7 +135,7 @@ class AttributesTest {
     @DisplayName("Null value fails required rule")
     void nullValueFailsRequired() {
         AttributeCheckResult result = Attributes.check(null, "required");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).contains(new RequiredRule());
     }
 
@@ -143,21 +143,21 @@ class AttributesTest {
     @DisplayName("Non-blank value passes required rule")
     void requiredPassesOnNonBlank() {
         AttributeCheckResult result = Attributes.check("something", "required");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Regex rule passes for matching input")
     void regexMatchSucceeds() {
         AttributeCheckResult result = Attributes.check("12345", "regex:\\d+");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Regex rule fails for non-matching input")
     void regexMismatchFails() {
         AttributeCheckResult result = Attributes.check("abc", "regex:\\d+");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new RegexRule(Pattern.compile("\\d+")));
     }
 
@@ -173,30 +173,30 @@ class AttributesTest {
     @DisplayName("Handles regex with colon in pattern")
     void regexWithColonIsParsedCorrectly() {
         AttributeCheckResult result = Attributes.check("AB:1234", "regex:[A-Z]{2}:[0-9]{4}");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Boolean type passes for 'true' or 'false'")
     void booleanTypeRecognized() {
-        assertThat(Attributes.check("true", "type:boolean").valid()).isTrue();
-        assertThat(Attributes.check("false", "type:boolean").valid()).isTrue();
+        assertThat(Attributes.check("true", "type:boolean").isValid()).isTrue();
+        assertThat(Attributes.check("false", "type:boolean").isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Boolean type fails for other values")
     void booleanTypeFailsOnOtherValues() {
         AttributeCheckResult result = Attributes.check("yes", "type:boolean");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules()).containsExactly(new TypeRule(TypeRule.Type.of("boolean").get()));
     }
 
     @Test
     @DisplayName("Case-insensitive boolean parsing")
     void booleanCaseInsensitive() {
-        assertThat(Attributes.check("TRUE", "type:boolean").valid()).isTrue();
-        assertThat(Attributes.check("False", "type:boolean").valid()).isTrue();
-        assertThat(Attributes.check("TrUe", "type:boolean").valid()).isTrue();
+        assertThat(Attributes.check("TRUE", "type:boolean").isValid()).isTrue();
+        assertThat(Attributes.check("False", "type:boolean").isValid()).isTrue();
+        assertThat(Attributes.check("TrUe", "type:boolean").isValid()).isTrue();
     }
 
 
@@ -215,14 +215,14 @@ class AttributesTest {
     @DisplayName("Trailing semicolon in rule string is ignored")
     void trailingSemicolonIgnored() {
         AttributeCheckResult result = Attributes.check("123", "type:number; min:100;");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Continue checking all rules in case of failure")
     void continueCheckingAfterFailure() {
         AttributeCheckResult result = Attributes.check("abc", "type:number; required; maxLength:2");
-        assertThat(result.valid()).isFalse();
+        assertThat(result.isValid()).isFalse();
         assertThat(result.failedRules())
                 .contains(new TypeRule(TypeRule.Type.of("number").get()), new MaxLengthRule(2));
     }
@@ -230,13 +230,13 @@ class AttributesTest {
     @Test
     @DisplayName("Succeeds on empty rule set")
     void emptyRuleSetAlwaysSucceeds() {
-        assertThat(Attributes.check("whatever", "").valid()).isTrue();
+        assertThat(Attributes.check("whatever", "").isValid()).isTrue();
     }
 
     @Test
     @DisplayName("Null rule string is treated as no rules")
     void nullRuleStringAlwaysValid() {
-        assertThat(Attributes.check("something", null).valid()).isTrue();
+        assertThat(Attributes.check("something", (String) null).isValid()).isTrue();
     }
 
     @Test
@@ -250,7 +250,7 @@ class AttributesTest {
     @Test
     @DisplayName("Rule name trimming works")
     void ruleNameTrimming() {
-        assertThat(Attributes.check("true", "   type:boolean   ").valid()).isTrue();
+        assertThat(Attributes.check("true", "   type:boolean   ").isValid()).isTrue();
     }
 
 
@@ -258,13 +258,13 @@ class AttributesTest {
     @DisplayName("In case of duplicated rules takes last")
     void duplicateRulesSilentlyDeduplicated() {
         AttributeCheckResult result = Attributes.check("5", "type:number; min:10; min:1");
-        assertThat(result.valid() || result.failedRules().size() == 1).isTrue();
+        assertThat(result.isValid() || result.failedRules().size() == 1).isTrue();
     }
 
     @Test
-    @DisplayName("All rules pass on valid input")
+    @DisplayName("All rules pass on isValid input")
     void allRulesPassWhenEverythingIsValid() {
         AttributeCheckResult result = Attributes.check("true", "required; regex:true|false; type:boolean");
-        assertThat(result.valid()).isTrue();
+        assertThat(result.isValid()).isTrue();
     }
 }

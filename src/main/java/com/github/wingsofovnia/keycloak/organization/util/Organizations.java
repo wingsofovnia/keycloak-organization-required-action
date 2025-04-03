@@ -1,4 +1,4 @@
-package com.github.wingsofovnia.keycloak.organization;
+package com.github.wingsofovnia.keycloak.organization.util;
 
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -11,7 +11,7 @@ import org.keycloak.organization.OrganizationProvider;
 import java.util.Optional;
 import java.util.UUID;
 
-public class Organizations {
+public final class Organizations {
 
     private Organizations() {
         throw new AssertionError();

@@ -7,19 +7,20 @@ import java.util.List;
 import java.util.Optional;
 
 public record AttributeCheckResult(
-        boolean valid,
+        String value,
+        boolean isValid,
         @Nonnull List<Rule> failedRules,
         @Nonnull Optional<Throwable> exception
 ) {
-    public static AttributeCheckResult success() {
-        return new AttributeCheckResult(true, List.of(), Optional.empty());
+    public static AttributeCheckResult success(String value) {
+        return new AttributeCheckResult(value, true, List.of(), Optional.empty());
     }
 
-    public static AttributeCheckResult failure(@Nonnull List<Rule> failedRules) {
-        return new AttributeCheckResult(false, failedRules, Optional.empty());
+    public static AttributeCheckResult failure(String value, @Nonnull List<Rule> failedRules) {
+        return new AttributeCheckResult(value, false, failedRules, Optional.empty());
     }
 
-    public static AttributeCheckResult failure(@Nonnull Rule failedRule, @Nonnull Throwable exception) {
-        return new AttributeCheckResult(false, List.of(failedRule), Optional.of(exception));
+    public static AttributeCheckResult failure(String value, @Nonnull Rule failedRule, @Nonnull Throwable exception) {
+        return new AttributeCheckResult(value, false, List.of(failedRule), Optional.of(exception));
     }
 }

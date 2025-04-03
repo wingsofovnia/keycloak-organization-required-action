@@ -45,11 +45,11 @@ import static java.util.stream.Collectors.toList;
  *
  * <pre>{@code
  * AttributeCheckResult result = Attributes.check("42", "required;type:double;min:0;max:100");
- * if (result.valid()) {
+ * if (result.isValid()) {
  *     // valid input
  * } else {
- *     for (RuleDef failed : result.failedRules()) {
- *         System.out.println("Failed rule: " + failed.ruleName());
+ *     for (Rule failed : result.failedRules()) {
+ *         System.out.println("Failed rule: " + failed.name());
  *     }
  * }
  * }</pre>
@@ -80,35 +80,52 @@ public final class Attributes {
     private static final String RULES_DEF_SET_SEPARATOR = ";";
     private static final String RULE_EXPECTATION_SEPARATOR = ":";
 
+
     /**
      * Validates a single attribute value against a semicolon-separated set of rules.
      * <p>
      * Example: {@code "required;type:double;min:1;max:10"}
      *
-     * @param value         the attribute value to validate (can be null)
+     * @param value       the attribute value to validate (can be null)
      * @param ruleDefsStr rule string defining validation logic; may be null or blank
      * @return a {@link AttributeCheckResult} object indicating whether the value passed validation and, if not, which rules failed
      */
     public static AttributeCheckResult check(String value, String ruleDefsStr) {
-        if (ruleDefsStr == null || ruleDefsStr.isBlank()) {
-            return AttributeCheckResult.success();
-        }
         return check(value, parseRules(ruleDefsStr));
     }
 
-    private static AttributeCheckResult check(String value, List<Rule> rules) {
+    /**
+     * Validates a single attribute value against a list of rules.
+     *
+     * @param value the attribute value to validate (can be null)
+     * @param rules list of rules to apply to the attribute value
+     * @return a {@link AttributeCheckResult} object indicating whether the value passed validation and, if not, which rules failed
+     */
+    public static AttributeCheckResult check(String value, List<Rule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return AttributeCheckResult.success(value);
+        }
+
         final List<Rule> failedRules = rules.stream()
                 .filter(rule -> !rule.check(value))
                 .collect(Collectors.toList());
 
         if (failedRules.isEmpty()) {
-            return AttributeCheckResult.success();
+            return AttributeCheckResult.success(value);
         }
 
-        return AttributeCheckResult.failure(failedRules);
+        return AttributeCheckResult.failure(value, failedRules);
     }
 
+    /**
+     * Parses a semicolon-separated string of rule definitions into a list of {@link Rule} objects.
+     * Each rule definition is processed using the {@link Attributes#parseRule(String)} method.
+     */
     public static List<Rule> parseRules(String ruleDefsStr) {
+        if (ruleDefsStr == null || ruleDefsStr.isBlank()) {
+            return List.of();
+        }
+
         return Stream.of(ruleDefsStr.split(RULES_DEF_SET_SEPARATOR))
                 .filter(ruleDefStr -> !ruleDefStr.isBlank())
                 .map(String::trim)
@@ -116,6 +133,10 @@ public final class Attributes {
                 .collect(toList());
     }
 
+    /**
+     * Parses a rule definition string {@code ruleName[:expectation]} into
+     * a {@link Rule} instance using registered {@link RuleFactory}.
+     */
     public static Rule parseRule(String ruleDefStr) {
         final String[] ruleNameAndMaybeExpectation = ruleDefStr.split(RULE_EXPECTATION_SEPARATOR, 2);
         if (ruleNameAndMaybeExpectation.length < 1) {
