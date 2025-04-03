@@ -11,9 +11,8 @@ public class MaxRule extends RuleWithNumericExpectation {
 
     @Override
     protected boolean checkAgainstNumericExpectation(@Nonnull String valueStr, @Nonnull Double expectation) {
-        final String trimmedValueStr = valueStr.trim();
         try {
-            return Double.parseDouble(trimmedValueStr) <= expectation;
+            return (valueStr.isBlank() ? 0 : Double.parseDouble(valueStr.trim())) <= expectation;
         } catch (NumberFormatException e) {
             return false;
         }

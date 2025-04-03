@@ -11,7 +11,6 @@ public class MaxLengthRule extends RuleWithNumericExpectation {
 
     @Override
     protected boolean checkAgainstNumericExpectation(@Nonnull String valueStr, @Nonnull Double expectation) {
-        final String trimmedValueStr = valueStr.trim();
-        return trimmedValueStr.length() <= expectation.intValue();
+        return valueStr.trim().length() <= expectation.intValue();
     }
 }

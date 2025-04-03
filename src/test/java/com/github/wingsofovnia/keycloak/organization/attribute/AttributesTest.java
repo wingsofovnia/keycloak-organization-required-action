@@ -272,6 +272,15 @@ class AttributesTest {
     }
 
     @Test
+    @DisplayName("min:1 fails when blank string is treated as 0")
+    void minFailsOnBlankStringParsedAsZero() {
+        AttributeCheckResult result = Attributes.check("   ", "min:1");
+        assertThat(result.valid()).isFalse();
+        assertThat(result.failedRules())
+                .containsExactly(RuleDef.of("min", "1"));
+    }
+
+    @Test
     @DisplayName("All rules pass on valid input")
     void allRulesPassWhenEverythingIsValid() {
         AttributeCheckResult result = Attributes.check("true", "required; regex:true|false; type:boolean");
