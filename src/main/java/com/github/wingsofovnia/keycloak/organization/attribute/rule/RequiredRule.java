@@ -1,21 +1,31 @@
 package com.github.wingsofovnia.keycloak.organization.attribute.rule;
 
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 
-public class RequiredRule implements Rule {
+public class RequiredRule extends Rule {
+
+    public static final String NAME = "required";
+
+    @Nonnull
     @Override
-    public String ruleName() {
-        return "required";
+    public String name() {
+        return NAME;
     }
 
     @Override
-    public boolean requiresExpectation() {
-        return false;
-    }
-
-    @Override
-    public boolean check(@Nonnull String valueStr, @Nullable String expectationStr) {
+    public boolean check(String valueStr) {
         return valueStr != null && !valueStr.trim().isEmpty();
+    }
+
+    public static class Factory implements RuleFactory<RequiredRule> {
+        @Override
+        public String ruleName() {
+            return NAME;
+        }
+
+        @Override
+        public RequiredRule create(Object... params) throws RuleDefException {
+            return new RequiredRule();
+        }
     }
 }

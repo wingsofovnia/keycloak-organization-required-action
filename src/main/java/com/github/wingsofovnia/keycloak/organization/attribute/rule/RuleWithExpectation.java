@@ -1,33 +1,54 @@
 package com.github.wingsofovnia.keycloak.organization.attribute.rule;
 
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+
+import java.util.Objects;
 
 /**
- * Base class for rules that require a non-blank expectation.
+ * Abstract base class for rules that are defined with an expectation value.
  * <p>
- * This abstract class handles common logic for checking whether the expectation string
- * is present and delegates actual validation to {@link #checkAgainstExpectation(String, String)}.
+ * Provides a structure for implementing validation rules that compare a given value
+ * against a specific expectation. The expectation is passed during object construction
+ * and cannot be null.
  * <p>
- * Leading and trailing whitespace in both the value and expectation are trimmed before comparison.
+ * Throws {@link RuleDefException} if the expectation is null.
  *
- * @see RuleWithNumericExpectation
+ * @param <T> the type of the expectation value associated with this rule
  */
-abstract class RuleWithExpectation implements Rule {
+public abstract class RuleWithExpectation<T> extends Rule {
 
-    @Override
-    public boolean requiresExpectation() {
-        return true;
-    }
+    private final T expectation;
 
-    @Override
-    public boolean check(@Nonnull String valueStr, @Nullable String expectationStr) {
-        if (expectationStr == null || expectationStr.isBlank()) {
-            throw new RuleDefException("Expectation cannot be null or blank");
+    RuleWithExpectation(T expectation) {
+        if (expectation == null) {
+            throw new RuleDefException("Expectation cannot be null");
         }
 
-        return checkAgainstExpectation(valueStr.trim(), expectationStr.trim());
+        this.expectation = expectation;
     }
 
-    protected abstract boolean checkAgainstExpectation(@Nonnull String valueStr, @Nonnull String expectationStr);
+    @Nonnull
+    public T expectation() {
+        return expectation;
+    }
+
+    @Override
+    public final boolean check(String valueStr) {
+        return check(valueStr, expectation);
+    }
+
+    protected abstract boolean check(String valueStr, @Nonnull T expectation);
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        RuleWithExpectation<?> that = (RuleWithExpectation<?>) o;
+        return Objects.equals(expectation, that.expectation);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), expectation);
+    }
 }

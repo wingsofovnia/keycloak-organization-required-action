@@ -7,7 +7,7 @@ import com.github.wingsofovnia.keycloak.organization.attribute.rule.MaxRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinLengthRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RequiredRule;
-import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDef;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.Rule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.TypeRule;
 import jakarta.annotation.Nonnull;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -38,7 +38,6 @@ import org.keycloak.models.utils.MapperTypeSerializer;
 import org.keycloak.organization.OrganizationProvider;
 import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.provider.ProviderConfigurationBuilder;
-import org.keycloak.services.validation.Validation;
 
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +49,7 @@ import java.util.stream.Stream;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.getInvitingOrganization;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.organizationAliasOf;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.randomDomainOf;
-import static java.util.stream.Collectors.*;
+import static java.util.stream.Collectors.toMap;
 import static org.keycloak.utils.RequiredActionHelper.getRequiredActionByProviderId;
 
 public class CreateOrganizationRequiredAction implements RequiredActionProvider, RequiredActionFactory {
@@ -347,32 +346,46 @@ public class CreateOrganizationRequiredAction implements RequiredActionProvider,
                 final String attrName = attrDef.getKey();
                 final String attrRuleDefSetStr = attrDef.getValue();
 
-                final Set<RuleDef> attrFieldRuleDefs = Attributes.ruleDefsOf(attrRuleDefSetStr);
 
-                final String attrFieldType = Attributes.findRule(attrFieldRuleDefs, TypeRule.class)
-                        .filter(rule -> rule.expectation() != null)
-                        .flatMap(def -> switch (def.expectation()) {
-                            case "double", "number" -> Optional.of("number");
-                            default -> Optional.empty();
-                        }).orElse("text");
+                final List<Rule> attrRules = Attributes.parseRules(attrRuleDefSetStr);
 
-                final String attrFieldMax = Attributes.findRule(attrFieldRuleDefs, MaxRule.class)
-                        .map(RuleDef::expectation)
+                final String attrFieldType = attrRules.stream()
+                        .filter(rule -> rule instanceof TypeRule)
+                        .map(rule -> switch (((TypeRule) rule).expectation()) {
+                            case DOUBLE, INTEGER, FLOAT -> "number";
+                            default -> "text";
+                        })
+                        .findAny()
+                        .orElse("text");
+
+
+                final String attrFieldMax = attrRules.stream()
+                        .filter(rule -> rule instanceof MaxRule)
+                        .map(rule -> ((MaxRule) rule).expectation().toString())
+                        .findAny()
                         .orElse("");
-                final String attrFieldMin = Attributes.findRule(attrFieldRuleDefs, MinRule.class)
-                        .map(RuleDef::expectation)
+                final String attrFieldMin = attrRules.stream()
+                        .filter(rule -> rule instanceof MinRule)
+                        .map(rule -> ((MinRule) rule).expectation().toString())
+                        .findAny()
                         .orElse("");
 
-                final String attrFieldMaxLength = Attributes.findRule(attrFieldRuleDefs, MaxLengthRule.class)
-                        .map(RuleDef::expectation)
+
+                final String attrFieldMaxLength = attrRules.stream()
+                        .filter(rule -> rule instanceof MaxLengthRule)
+                        .map(rule -> ((MaxLengthRule) rule).expectation().toString())
+                        .findAny()
+                        .orElse("");
+                final String attrFieldMinLength = attrRules.stream()
+                        .filter(rule -> rule instanceof MinLengthRule)
+                        .map(rule -> ((MinLengthRule) rule).expectation().toString())
+                        .findAny()
                         .orElse("");
 
-                final String attrFieldMinLength = Attributes.findRule(attrFieldRuleDefs, MinLengthRule.class)
-                        .map(RuleDef::expectation)
-                        .orElse("");
-
-                final String attrFieldRequired = Attributes.findRule(attrFieldRuleDefs, RequiredRule.class)
+                final String attrFieldRequired = attrRules.stream()
+                        .filter(rule -> rule instanceof RequiredRule)
                         .map(def -> Boolean.TRUE.toString())
+                        .findAny()
                         .orElse("");
 
                 organizationAttributeAttribute.put(attrName, Map.of(

@@ -11,7 +11,7 @@ import jakarta.annotation.Nonnull;
  *     <li>An unsupported type is specified (e.g. {@code type:tristate})</li>
  * </ul>
  */
-public class RuleDefException extends RuntimeException {
+public class RuleDefException extends IllegalArgumentException {
     public RuleDefException(@Nonnull String message) {
         super(message);
     }

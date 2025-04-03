@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static com.github.wingsofovnia.keycloak.organization.Organizations.organizationAliasOf;
-import static org.assertj.core.api.Assertions.assertThat;
 import static com.github.wingsofovnia.keycloak.organization.Organizations.randomDomainOf;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

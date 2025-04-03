@@ -7,19 +7,16 @@ import com.github.wingsofovnia.keycloak.organization.attribute.rule.MinRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RegexRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RequiredRule;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.Rule;
-import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDef;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleDefException;
+import com.github.wingsofovnia.keycloak.organization.attribute.rule.RuleFactory;
 import com.github.wingsofovnia.keycloak.organization.attribute.rule.TypeRule;
-import jakarta.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.toList;
 
 /**
  * A simple rule-based validation engine for validating attribute values against
@@ -68,17 +65,17 @@ public final class Attributes {
         throw new AssertionError();
     }
 
-    private static final List<Rule> RULES = List.of(
-            new MinRule(),
-            new MaxRule(),
-            new MinLengthRule(),
-            new MaxLengthRule(),
-            new RequiredRule(),
-            new RegexRule(),
-            new TypeRule()
+    private static final List<RuleFactory<?>> RULE_FACTORIES = List.of(
+            new MinRule.Factory(),
+            new MaxRule.Factory(),
+            new MinLengthRule.Factory(),
+            new MaxLengthRule.Factory(),
+            new RequiredRule.Factory(),
+            new RegexRule.Factory(),
+            new TypeRule.Factory()
     );
-    private static final Map<String, Rule> RULES_MAP = RULES.stream()
-            .collect(Collectors.toMap(Rule::ruleName, rule -> rule));
+    private static final Map<String, RuleFactory<?>> RULES_FACTORY_MAP = RULE_FACTORIES.stream()
+            .collect(Collectors.toMap(RuleFactory::ruleName, rule -> rule));
 
     private static final String RULES_DEF_SET_SEPARATOR = ";";
     private static final String RULE_EXPECTATION_SEPARATOR = ":";
@@ -89,101 +86,56 @@ public final class Attributes {
      * Example: {@code "required;type:double;min:1;max:10"}
      *
      * @param value         the attribute value to validate (can be null)
-     * @param ruleDefSetStr rule string defining validation logic; may be null or blank
+     * @param ruleDefsStr rule string defining validation logic; may be null or blank
      * @return a {@link AttributeCheckResult} object indicating whether the value passed validation and, if not, which rules failed
      */
-    public static AttributeCheckResult check(String value, String ruleDefSetStr) {
-        if (ruleDefSetStr == null || ruleDefSetStr.isBlank()) {
+    public static AttributeCheckResult check(String value, String ruleDefsStr) {
+        if (ruleDefsStr == null || ruleDefsStr.isBlank()) {
             return AttributeCheckResult.success();
         }
-        return check(value, ruleDefsOf(ruleDefSetStr));
+        return check(value, parseRules(ruleDefsStr));
     }
 
-    private static AttributeCheckResult check(String value, Set<RuleDef> ruleDefSet) {
-        final Map<String, String> ruleDefSetMap = new HashMap<>(ruleDefSet.size());
-        for (RuleDef ruleDef : ruleDefSet) {
-            final String ruleName = ruleDef.ruleName();
-            final @Nullable String expectation = ruleDef.expectation();
-            ruleDefSetMap.put(ruleName, expectation);
+    private static AttributeCheckResult check(String value, List<Rule> rules) {
+        final List<Rule> failedRules = rules.stream()
+                .filter(rule -> !rule.check(value))
+                .collect(Collectors.toList());
+
+        if (failedRules.isEmpty()) {
+            return AttributeCheckResult.success();
         }
 
-        return check(value, ruleDefSetMap);
+        return AttributeCheckResult.failure(failedRules);
     }
 
-    private static AttributeCheckResult check(String value, Map<String, String> ruleDefSetMap) {
-        final List<RuleDef> failedRules = new ArrayList<>(ruleDefSetMap.size());
-
-        for (Map.Entry<String, String> ruleEntry : ruleDefSetMap.entrySet()) {
-            final String ruleName = ruleEntry.getKey();
-            final Rule rule = getRule(ruleName).orElseThrow(() -> new IllegalArgumentException("Unknown rule: " + ruleName));
-            final @Nullable String ruleExpectation = ruleEntry.getValue();
-
-            if (rule.requiresExpectation() && (ruleExpectation == null || ruleExpectation.isBlank())) {
-                throw new IllegalArgumentException("Rule " + ruleName + " requires a non-blank expectation");
-            }
-
-            try {
-                if (!rule.check(value, ruleExpectation)) {
-                    failedRules.add(RuleDef.of(ruleName, ruleExpectation));
-                }
-            } catch (RuleDefException e) {
-                return AttributeCheckResult.failure(RuleDef.of(ruleName, ruleExpectation), e);
-            }
-        }
-
-        if (!failedRules.isEmpty()) {
-            return AttributeCheckResult.failure(failedRules);
-        }
-        return AttributeCheckResult.success();
-    }
-
-    public static Optional<RuleDef> findRule(Set<RuleDef> ruleDefSet, Class<? extends Rule> ruleClass) {
-        final Optional<Rule> ruleOpt = RULES.stream().filter(ruleClass::isInstance).findAny();
-        if (ruleOpt.isEmpty()) {
-            return Optional.empty();
-        }
-
-        final String ruleName = ruleOpt.get().ruleName();
-        return ruleDefSet.stream()
-                .filter(def -> def.ruleName().equals(ruleName))
-                .findFirst();
-    }
-
-    public static Set<RuleDef> ruleDefsOf(String ruleDefSetStr) {
-        return Stream.of(ruleDefSetStr.split(RULES_DEF_SET_SEPARATOR))
+    public static List<Rule> parseRules(String ruleDefsStr) {
+        return Stream.of(ruleDefsStr.split(RULES_DEF_SET_SEPARATOR))
                 .filter(ruleDefStr -> !ruleDefStr.isBlank())
                 .map(String::trim)
-                .map(Attributes::ruleDefOf)
-                .collect(Collectors.toSet());
+                .map(Attributes::parseRule)
+                .collect(toList());
     }
 
-    public static Optional<RuleDef> findRule(String ruleDefSetStr, Class<? extends Rule> ruleClass) {
-        return findRule(ruleDefsOf(ruleDefSetStr), ruleClass);
-    }
-
-    public static RuleDef ruleDefOf(String ruleDefStr) {
-        final String[] ruleNameAndExpectation = ruleDefStr.split(RULE_EXPECTATION_SEPARATOR, 2);
-        if (ruleNameAndExpectation.length < 1) {
-            throw new IllegalArgumentException("Rule definition '" + ruleDefStr + "' is invalid");
+    public static Rule parseRule(String ruleDefStr) {
+        final String[] ruleNameAndMaybeExpectation = ruleDefStr.split(RULE_EXPECTATION_SEPARATOR, 2);
+        if (ruleNameAndMaybeExpectation.length < 1) {
+            throw new RuleDefException("Rule definition '" + ruleDefStr + "' is invalid: missing rule name");
         }
 
-        final String ruleName = ruleNameAndExpectation[0].trim();
+        final String ruleName = ruleNameAndMaybeExpectation[0].trim();
         if (ruleName.isBlank()) {
-            throw new IllegalArgumentException("Rule name cannot be blank");
+            throw new RuleDefException("Rule name cannot be blank");
         }
 
-        final String ruleExpectation;
-        if (ruleNameAndExpectation.length == 2) {
-            ruleExpectation = ruleNameAndExpectation[1].trim();
-        } else {
-            ruleExpectation = null;
+        final RuleFactory<?> ruleFactory = RULES_FACTORY_MAP.get(ruleName);
+        if (ruleFactory == null) {
+            throw new RuleDefException("Unknown rule '" + ruleName + "'");
         }
 
-        return new RuleDef(ruleName, ruleExpectation);
-    }
+        final Object[] ruleParams = ruleNameAndMaybeExpectation.length == 2
+                ? new Object[]{ruleNameAndMaybeExpectation[1]}
+                : new Object[0];
 
-    private static Optional<Rule> getRule(String ruleName) {
-        return Optional.ofNullable(RULES_MAP.get(ruleName));
+        return ruleFactory.create(ruleParams);
     }
-
 }
